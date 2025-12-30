@@ -85,14 +85,46 @@ def main_app():
             # Decode image
             bytes_data = camera_image.getvalue()
             cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
-            detector = cv2.QRCodeDetector()
-            data, bbox, _ = detector.detectAndDecode(cv2_img)
+            
+            # Convert to grayscale (improves detection)
+            gray_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
+            
+            data = None
+            debug_info = []
+
+            # Method 1: Pyzbar (best for 1D Barcodes)
+            try:
+                from pyzbar.pyzbar import decode
+                decoded_objects = decode(gray_img) # Use gray image
+                if decoded_objects:
+                    obj = decoded_objects[0]
+                    data = obj.data.decode("utf-8")
+                    st.success(f"✅ Barcode Detected: {data} ({obj.type})")
+                else:
+                    debug_info.append("Pyzbar: No code found")
+            except ImportError:
+                debug_info.append("Pyzbar: Library not installed")
+            except Exception as e:
+                debug_info.append(f"Pyzbar Error: {e}")
+                
+            # Method 2: OpenCV (best for QR Codes) - Fallback
+            if not data:
+                detector = cv2.QRCodeDetector()
+                # OpenCV sometimes likes the color image, sometimes gray. trying original first.
+                val, _, _ = detector.detectAndDecode(cv2_img)
+                if val:
+                    data = val
+                    st.success(f"✅ QR Detected: {data}")
+                else:
+                     debug_info.append("CV2: No QR found")
             
             if data:
                 new_scan = data
-                st.success(f"Detected: {data}")
             else:
-                st.warning("No QR code detected.")
+                st.warning("❌ No code detected.")
+                with st.expander("Debug Info"):
+                    for info in debug_info:
+                        st.write(info)
 
     with tab2:
         with st.form("scan_form", clear_on_submit=True):
