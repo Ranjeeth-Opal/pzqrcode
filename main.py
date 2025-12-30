@@ -57,6 +57,8 @@ def main_app():
     # Initialize Session State (specific to main app)
     if 'scanned_items' not in st.session_state:
         st.session_state.scanned_items = []
+    if 'camera_key' not in st.session_state:
+        st.session_state.camera_key = 0
     
     # Branch Selection
     st.title("🔋 Battery Stock Scanning")
@@ -76,14 +78,17 @@ def main_app():
     tab1, tab2 = st.tabs(["📷 Camera Scan", "#️⃣ Manual Entry"])
     
     new_scan = None
+    scanned_image_data = None
     
     with tab1:
         st.write("Take a picture of the QR/Barcode")
-        camera_image = st.camera_input("Scan Battery")
+        # Dynamic key to reset camera
+        camera_image = st.camera_input("Scan Battery", key=f"camera_{st.session_state.camera_key}")
         
         if camera_image is not None:
             # Decode image
             bytes_data = camera_image.getvalue()
+            scanned_image_data = bytes_data # Store for saving later
             cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
             
             # Convert to grayscale (improves detection)
@@ -147,6 +152,21 @@ def main_app():
             elif err:
                 st.error(f"Error checking DB: {err}")
             else:
+                # SAVE IMAGE IF EXISTS
+                if scanned_image_data:
+                    try:
+                        import os
+                        if not os.path.exists("scanned_images"):
+                            os.makedirs("scanned_images")
+                        
+                        timestamp_str = time.strftime("%Y%m%d_%H%M%S")
+                        filename = f"scanned_images/{new_scan}_{timestamp_str}.jpg"
+                        with open(filename, "wb") as f:
+                            f.write(scanned_image_data)
+                        # st.info(f"Image saved: {filename}")
+                    except Exception as e:
+                        st.error(f"Failed to save image: {e}")
+
                 st.session_state.scanned_items.append({
                     'barcode': new_scan,
                     'username': user['username'],
@@ -154,9 +174,12 @@ def main_app():
                     'status': 'Pending'
                 })
                 st.success(f"Added {new_scan} to list.")
-                # We need to rerun to clear camera input if possible or update list
-                # Rerun might be annoying for camera flow, but necessary to reset `new_scan` state if we rely on it.
-                # Actually, camera input persists until retaken. We might need a "Clear" button or just let it be.
+                
+                # RESET CAMERA if source was camera
+                if scanned_image_data:
+                    st.session_state.camera_key += 1
+                    time.sleep(0.5) # Short pause to see success message
+                    st.rerun()
 
     # Display Scanned Items
     st.divider()
@@ -195,16 +218,45 @@ def main_app():
     # Admin View for devp01
     if user['username'] == 'devp01':
         st.divider()
-        st.subheader("🛠 Admin: All Uploaded Scans")
-        with st.expander("View All Data", expanded=False):
-            all_scans, err = db.get_all_scans()
-            if err:
-                 st.info(f"Status: {err}")
-            elif not all_scans.empty:
-                 st.dataframe(all_scans, use_container_width=True)
-                 st.caption(f"Total Records: {len(all_scans)}")
-            else:
-                 st.info("No records found.")
+        st.subheader("🛠 Admin: Manage Scans")
+        
+        all_scans, err = db.get_all_scans()
+        if err:
+             st.error(f"Error loading data: {err}")
+        elif not all_scans.empty:
+             # Add a selection column
+             all_scans.insert(0, "Select", False)
+             
+             # Show data editor
+             edited_df = st.data_editor(
+                 all_scans,
+                 column_config={
+                     "Select": st.column_config.CheckboxColumn(required=True),
+                     "created_date": st.column_config.TextColumn(disabled=True),
+                     "scan_id": st.column_config.NumberColumn(disabled=True),
+                     "barcode": st.column_config.TextColumn(disabled=True),
+                     "created_by": st.column_config.TextColumn(disabled=True),
+                     "branch_code": st.column_config.TextColumn(disabled=True),
+                 },
+                 use_container_width=True,
+                 hide_index=True
+             )
+             
+             # Filter selected
+             selected_rows = edited_df[edited_df['Select']]
+             
+             if not selected_rows.empty:
+                 st.warning(f"Selected {len(selected_rows)} record(s) for deletion.")
+                 if st.button("🗑 Delete Selected", type="primary"):
+                     count = 0
+                     for index, row in selected_rows.iterrows():
+                         db.delete_scan(row['scan_id'])
+                         count += 1
+                     st.success(f"Deleted {count} records.")
+                     time.sleep(1)
+                     st.rerun()
+        else:
+             st.info("No records found.")
 
 if __name__ == "__main__":
     if not st.session_state.logged_in:

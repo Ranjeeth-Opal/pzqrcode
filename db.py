@@ -69,7 +69,10 @@ def insert_scan(barcode, username, branch):
         else:
             df = pd.DataFrame(columns=['scan_id', 'barcode', 'created_by', 'branch_code', 'created_date'])
             
-        new_id = len(df) + 1
+        if not df.empty and 'scan_id' in df.columns:
+            new_id = int(df['scan_id'].max()) + 1
+        else:
+            new_id = 1
         new_row = {
             'scan_id': new_id,
             'barcode': barcode,
@@ -97,7 +100,12 @@ def insert_scan_batch(scans):
             df = pd.DataFrame(columns=['scan_id', 'barcode', 'created_by', 'branch_code', 'created_date'])
             
         new_rows = []
-        current_id = len(df)
+        if not df.empty and 'scan_id' in df.columns:
+            # Safely get max ID, handle bad data with errors='coerce' to be safe, though not critical if we manage file well
+            current_id = df['scan_id'].max()
+            if pd.isna(current_id): current_id = 0
+        else:
+            current_id = 0
         
         existing_barcodes = set(df['barcode'].astype(str).values)
         
@@ -138,3 +146,21 @@ def get_all_scans():
         return df, None
     except Exception as e:
         return None, str(e)
+
+def delete_scan(scan_id):
+    try:
+        if not os.path.exists(SCANS_FILE):
+             return False, "File not found"
+             
+        df = pd.read_csv(SCANS_FILE)
+        
+        # Check if ID exists
+        if scan_id not in df['scan_id'].values:
+            return False, "ID not found"
+            
+        # Filter out
+        df = df[df['scan_id'] != scan_id]
+        df.to_csv(SCANS_FILE, index=False)
+        return True, "Deleted successfully"
+    except Exception as e:
+        return False, str(e)
