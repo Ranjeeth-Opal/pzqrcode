@@ -126,3 +126,15 @@ def insert_scan_batch(scans):
         return True, f"Successfully inserted {count} records."
     except Exception as e:
         return False, str(e)
+
+def get_all_scans():
+    try:
+        if not os.path.exists(SCANS_FILE):
+            return pd.DataFrame(), "No scans found"
+        df = pd.read_csv(SCANS_FILE)
+        # Sort by date desc if possible
+        if 'created_date' in df.columns:
+            df = df.sort_values(by='created_date', ascending=False)
+        return df, None
+    except Exception as e:
+        return None, str(e)
