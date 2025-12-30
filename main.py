@@ -160,6 +160,20 @@ def main_app():
         st.session_state.scanned_items = []
         st.rerun()
 
+    # Admin View for devp01
+    if user['username'] == 'devp01':
+        st.divider()
+        st.subheader("🛠 Admin: All Uploaded Scans")
+        with st.expander("View All Data", expanded=False):
+            all_scans, err = db.get_all_scans()
+            if err:
+                 st.info(f"Status: {err}")
+            elif not all_scans.empty:
+                 st.dataframe(all_scans, use_container_width=True)
+                 st.caption(f"Total Records: {len(all_scans)}")
+            else:
+                 st.info("No records found.")
+
 if __name__ == "__main__":
     if not st.session_state.logged_in:
         login_page()
