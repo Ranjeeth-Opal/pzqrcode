@@ -85,14 +85,19 @@ def main_app():
             # Decode image
             bytes_data = camera_image.getvalue()
             cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
-            detector = cv2.QRCodeDetector()
-            data, bbox, _ = detector.detectAndDecode(cv2_img)
             
-            if data:
+            # Use pyzbar to decode
+            from pyzbar.pyzbar import decode
+            decoded_objects = decode(cv2_img)
+            
+            if decoded_objects:
+                # Take the first detected code
+                obj = decoded_objects[0]
+                data = obj.data.decode("utf-8")
                 new_scan = data
-                st.success(f"Detected: {data}")
+                st.success(f"Detected: {data} ({obj.type})")
             else:
-                st.warning("No QR code detected.")
+                st.warning("No barcode detected.")
 
     with tab2:
         with st.form("scan_form", clear_on_submit=True):
@@ -165,3 +170,4 @@ if __name__ == "__main__":
         login_page()
     else:
         main_app()
+
